@@ -10,12 +10,12 @@
 # COMMAND ----------
 
 # MAGIC %md
-# MAGIC Managers face a tough decision when going into a shootout. Most teams have two or three goalkeepers on the roster, and the starting goalkeeper might not be the best for the specialized skill of blocking shots in a shootout. Several managers will substitute the goalkeeper right before the shootout so the goalkeeper with the highest save rate will participate in the shootout. 
+# MAGIC Managers face a tough decision when going into a shootout. Most teams have two or three goalkeepers on the roster, and the starting goalkeeper might not be the best for the specialized skill of blocking shots in a shootout. Several managers will substitute the goalkeeper right before the shootout so the goalkeeper with the highest *save rate* will participate in the shootout. 
 
 # COMMAND ----------
 
 # MAGIC %md
-# MAGIC But how does a manager determine which goalkeeper has the highest *save rate*? The most common would be to use training sessions and have each goalkeeper face penalty kicks from several different shooters. By recording each goalkeeper's stats, the coach can choose the optimal goalkeeper for the shootout.
+# MAGIC But how does a manager determine which goalkeeper has the highest *save rate*? This project explores this question.
 
 # COMMAND ----------
 
@@ -25,9 +25,30 @@
 # COMMAND ----------
 
 # MAGIC %md
+# MAGIC ### Assumptions
+
+# COMMAND ----------
+
+# MAGIC %md
+# MAGIC For simplicity throughout the exercise, we will assume that each goalkeeper has an inherent *true save rate*. This does not change over time or with practice. Whether the goalkeeper saves a given shot is a random variable. The goalkeeper saves the shot with probability *true save rate* or the shot is scored.
+
+# COMMAND ----------
+
+# MAGIC %md
+# MAGIC ### Other Applications
+
+# COMMAND ----------
+
+# MAGIC %md
 # MAGIC The rest of this notebook will explore how a coach might use data to determine which goalkeeper on her roster has the highest save rate. The applications for this kind of algorithm, however, are much broader than sports. Similar approaches could be used for:
 # MAGIC - a marketing analyst determining which ad has the highest click-through rate
 # MAGIC - a drug manufacturer determining which drug is most effective
+# MAGIC - a manager determining which price is most likely to convince a customer to buy a product
+
+# COMMAND ----------
+
+# MAGIC %md
+# MAGIC ### Attribution
 
 # COMMAND ----------
 
@@ -41,12 +62,7 @@
 # COMMAND ----------
 
 # MAGIC %md
-# MAGIC For simplicity throughout the exercise, we will assume that each goalkeeper has an inherent *true save rate*. This does not change over time or with practice. Whether the goalkeeper saves a given shot is a random variable. The goalkeeper saves the shot with probability *true save rate* or it is scored.
-
-# COMMAND ----------
-
-# MAGIC %md
-# MAGIC #Classical A/B Testing
+# MAGIC # Approach 1: Classical A/B Testing
 
 # COMMAND ----------
 
@@ -58,19 +74,19 @@
 # MAGIC %md
 # MAGIC The coach wants to know which goalkeeper (Buffon or Casillas) has a higher *save rate*. The coach plans an experiment.
 # MAGIC
-# MAGIC > Each goalkeeper will face a number of shots. The coach will record whether each shot is saved and use this data to determine which goalkeeper has the hibgher save rate or if they are the same.
+# MAGIC > During training sessions, each goalkeeper will face a number of penalty kick shots from several different shooters. The coach will record whether each shot is saved and use this data to determine which goalkeeper has the higher save rate or if they are the same.
 
 # COMMAND ----------
 
 # MAGIC %md
-# MAGIC The coach knows that the average save rate among all goalkeepers is about 25%. The coach reasons that it is important to be able to detect a difference of 5% or greater.
+# MAGIC The coach knows that the average save rate among all goalkeepers is about [25%](https://theanalyst.com/2024/05/premier-league-penalties-like-free-goal). The coach reasons that it is important to be able to detect a difference of 5% or greater between the true save rates of each goalkeeper.
 # MAGIC
-# MAGIC But how many shots should each goalkeeper face?
+# MAGIC To ensure the experiment picks up the difference (if it exists), *how many shots should each goalkeeper face?*
 
 # COMMAND ----------
 
 # MAGIC %md
-# MAGIC The coach is not sure how to answer that question. They google around online and land on this [calculator](https://www2.ccrb.cuhk.edu.hk/stat/proportion/Casagrande.htm) from the center for clinical research and biostats. 
+# MAGIC The coach is not sure how to answer that question. She googles around online and lands on this [calculator](https://www2.ccrb.cuhk.edu.hk/stat/proportion/Casagrande.htm) from the center for clinical research and biostats. 
 
 # COMMAND ----------
 
@@ -78,8 +94,8 @@ gk1 = 0.25
 gk2 = 0.3 #the minimum difference the coach wants to detect
 
 r=1 #each goalkeeper should face the same number of shots
-alpha = 0.25 #type I error, rejecting true null. Coach does not care if she thinks a goalkeeper is better when they are actually the same, excpet the substitute
-beta = 0.01 #type II error, failing to reject false null. Coach really wants to make sure she knows the different if there is one
+alpha = 0.25 #type I error, rejecting true null. Coach is not too concerned if she thinks a goalkeeper is better when they are actually the same. The cost is using an unnecessary substitute, which is not as critical as the other error... 
+beta = 0.01 #type II error, failing to reject false null. Coach really wants to make sure she knows the difference if there is one
 power = 1 - beta 
 
 # COMMAND ----------
@@ -94,48 +110,150 @@ power = 1 - beta
 
 # COMMAND ----------
 
-
+# MAGIC %md
+# MAGIC Each goalkeeper needs to face 1964 shots to ensure we pick up the difference!!!
 
 # COMMAND ----------
 
+# MAGIC %md
+# MAGIC ## Simulation
+
+# COMMAND ----------
+
+# MAGIC %md
+# MAGIC Let's take a brief pause from the story and simulate what this would look like.
+
+# COMMAND ----------
+
+#set up the experiment
 import numpy as np
-
-samples = np.random.choice([1, 0], size=5, p=[0.25, 0.75])
-display(samples)
-
-# COMMAND ----------
-
-p1 = .25
-p2 = 0.2
-
-n = 1000
-
-p1_array = np.random.choice([1, 0], size=n, p=[p1, 1-p1])
-p2_array = np.random.choice([1, 0], size=n, p=[p2, 1-p2])
-
-# COMMAND ----------
-
 from scipy.stats import ttest_ind
 
-max_p_val = 0.05
+def t_experiment(p1_name, p1, p2_name, p2, n, seed):
+    np.random.seed(seed)  # Set the seed for reproducibility
 
-# Perform a 2-sided test
-t_stat, p_value = ttest_ind(p1_array, p2_array, alternative='two-sided')
-display({"t-statistic": t_stat, "p-value": p_value})
+    #simulate each goalkeeper facing n shots. 1 is a save, 0 is a goal
+    p1_results = np.random.choice([1, 0], size=n, p=[p1, 1-p1])
+    p2_results = np.random.choice([1, 0], size=n, p=[p2, 1-p2])
 
-# COMMAND ----------
+    # Perform a 2-sided test
+    t_stat, p_value = ttest_ind(p1_results, p2_results, alternative='two-sided')
 
-p2_array.mean()
+    #interpret test
+    if p_value < alpha:
+        r = 'GOALKEEPERS HAVE STATISTICALLY DIFFERENT SAVE RATES'
+    else:
+        r = 'GOALKEEPERS HAVE STATISTICALLY EQUIVALENT SAVE RATES'
+
+    #print results
+    print(p1_name, "observed save rate:", p1_results.mean())
+    print(p2_name, "observed save rate:", p2_results.mean())
+    print('t-statistic:', t_stat)
+    print('p-value:', p_value)
+    print()
+    print(r)
 
 # COMMAND ----------
 
 # MAGIC %md
-# MAGIC talk about power and effect size
+# MAGIC ### Scenario 1
 
 # COMMAND ----------
 
 # MAGIC %md
-# MAGIC explore vs. exploit
+# MAGIC In scenario 1, let's say Buffon has a save rate of 25% and Casillas has a save rate of 30%
+
+# COMMAND ----------
+
+buffon_rate = 0.25
+casillas_rate = 0.3
+n=1964
+seed=123 #for reproducibility
+
+t_experiment('Buffon', buffon_rate, 'Casillas', casillas_rate, n, 123)
+
+# COMMAND ----------
+
+# MAGIC %md
+# MAGIC We correctly identified that Casillas is the better goalkeeper
+
+# COMMAND ----------
+
+# MAGIC %md
+# MAGIC ### Scenario 2 
+
+# COMMAND ----------
+
+# MAGIC %md
+# MAGIC But now let's say they are a bit closer. Buffon's save rate is 28% and Casillas's is 30%
+
+# COMMAND ----------
+
+buffon_rate = 0.28
+casillas_rate = 0.3
+n=1964
+seed=123 #for reproducibility
+
+t_experiment('Buffon', buffon_rate, 'Casillas', casillas_rate, n, 123)
+
+# COMMAND ----------
+
+# MAGIC %md
+# MAGIC We spent nearly 4000 penalty kicks to not even pick up the different save rates
+
+# COMMAND ----------
+
+# MAGIC %md
+# MAGIC ### Scenario 3
+
+# COMMAND ----------
+
+# MAGIC %md 
+# MAGIC Now let's say the opposite, Casillas is much better than Buffon. Buffon's save rate is 20% and Casillas's is 30%
+
+# COMMAND ----------
+
+buffon_rate = 0.2
+casillas_rate = 0.3
+n=1964
+seed=123 #for reproducibility
+
+t_experiment('Buffon', buffon_rate, 'Casillas', casillas_rate, n, 123)
+
+# COMMAND ----------
+
+# MAGIC %md 
+# MAGIC Our test clearly picks up the difference. But we could have gotten the same information in far fewer trials, with each goalkeeper facing only 40 shots (2% of the original planned experiment)
+
+# COMMAND ----------
+
+buffon_rate = 0.2
+casillas_rate = 0.3
+n=40
+seed=123 #for reproducibility
+
+t_experiment('Buffon', buffon_rate, 'Casillas', casillas_rate, n, 123)
+
+# COMMAND ----------
+
+# MAGIC %md
+# MAGIC Our simulation laid bare some of the drawbacks of the classical approach to this problem:
+# MAGIC
+# MAGIC - The coach does not want to spend hours taking 4000 penalty kicks. That time could be spent on more impactful training
+# MAGIC - If the goalkeepers have similar, but not *equivalent*, save rates (as in scenario 2), we still will not identify the correct goalkeeper
+# MAGIC - If the goalkeepers are vastly different (as in scenario 3), we don't want to complete the experiment
+# MAGIC - What if the team faces a shootout before they can complete the experiment? They need a way to choose which goalkeeper with incomplete data
+
+# COMMAND ----------
+
+# MAGIC %md
+# MAGIC This exposes a tension called *The Explore Exploit Dilemma*.
+# MAGIC
+# MAGIC On one hand we want to explore and collect more data (have both goalkeepers face more shots).
+# MAGIC
+# MAGIC On the other hand, we want to exploit and make sure the better goalkeeper faces as many shots as possible, since he will save more.
+# MAGIC
+# MAGIC Our first approach does not handle this tension in a satisfactory way. Let's turn to a new way of thinking.
 
 # COMMAND ----------
 
