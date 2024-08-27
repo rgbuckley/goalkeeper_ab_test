@@ -242,6 +242,7 @@ t_experiment('Buffon', buffon_rate, 'Casillas', casillas_rate, n, 123)
 # MAGIC - The coach does not want to spend hours taking 4000 penalty kicks. That time could be spent on more impactful training
 # MAGIC - If the goalkeepers have similar, but not *equivalent*, save rates (as in scenario 2), we still will not identify the correct goalkeeper
 # MAGIC - If the goalkeepers are vastly different (as in scenario 3), we don't want to complete the experiment
+# MAGIC - While there are tests (like the [Chi-squared](https://en.wikipedia.org/wiki/Chi-squared_test)) that scale to multiple goalkeepers, they often only test if one goalkeeper is _different_, not which one is best
 # MAGIC - What if the team faces a shootout before they can complete the experiment? They need a way to choose which goalkeeper with incomplete data
 
 # COMMAND ----------
@@ -257,89 +258,13 @@ t_experiment('Buffon', buffon_rate, 'Casillas', casillas_rate, n, 123)
 
 # COMMAND ----------
 
-import numpy as np
-from scipy.stats import norm, t
-
-import matplotlib.pyplot as plt
-
-# COMMAND ----------
-
-np.random.seed(123)
-
-# COMMAND ----------
-
-N=1000
-mu=5
-sigma=2
-X = np.random.randn(N)*sigma + mu
+# MAGIC %md
+# MAGIC #Approach 2: Greedy Epsilon
 
 # COMMAND ----------
 
 # MAGIC %md
-# MAGIC Z confidence interval
-
-# COMMAND ----------
-
-mu_hat = np.mean(X)
-sigma_hat = np.std(X, ddof=1)
-z_left = norm.ppf(.025)
-z_right = norm.ppf(.975)
-lower = mu_hat + z_left * sigma_hat / np.sqrt(N)
-upper = mu_hat + z_right * sigma_hat / np.sqrt(N)
-
-# COMMAND ----------
-
-print(lower, mu_hat, upper)
-
-# COMMAND ----------
-
-# MAGIC %md
-# MAGIC T confidence Interval
-
-# COMMAND ----------
-
-mu_hat = np.mean(X)
-sigma_hat = np.std(X, ddof=1)
-t_left = t.ppf(.025, df=N-1)
-t_right = t.ppf(.975, df=N-1)
-lower = mu_hat + z_left * sigma_hat / np.sqrt(N)
-upper = mu_hat + z_right * sigma_hat / np.sqrt(N)
-
-# COMMAND ----------
-
-print(lower, mu_hat, upper)
-
-# COMMAND ----------
-
-# MAGIC %md
-# MAGIC experiment
-
-# COMMAND ----------
-
-def experiment():
-    X = np.random.randn(N)*sigma + mu
-    mu_hat = np.mean(X)
-    sigma_hat = np.std(X, ddof=1)
-    t_left = t.ppf(.025, df=N-1)
-    t_right = t.ppf(.975, df=N-1)
-    lower = mu_hat + z_left * sigma_hat / np.sqrt(N)
-    upper = mu_hat + z_right * sigma_hat / np.sqrt(N)
-    return mu > lower and mu < upper
-
-# COMMAND ----------
-
-def multi_experiment(M):
-    results = [experiment() for i in range(M)]
-    return np.mean(results)
-
-# COMMAND ----------
-
-multi_experiment(10000)
-
-# COMMAND ----------
-
-# MAGIC %md
-# MAGIC # Bandits
+# MAGIC The coach asks her assistant if there is a better option for an experiment
 
 # COMMAND ----------
 
@@ -348,21 +273,21 @@ multi_experiment(10000)
 
 # COMMAND ----------
 
-num_trials = 10000
-eps = 0.1
-bandit_probs = [0.2, 0.5, 0.8]
+
 
 # COMMAND ----------
 
-class Bandit:
-    def __init__(self, p):
-        #p is the win rate
+#set up a class to model each goalkeeper
+class Goalkeeper:
+    def __init__(self, p, name):
+        #p is the true save rate
         self.p = p
-        self.p_estimate = 0
+        self.p_estimate = 0 #start with an estimate of 0
         self.N = 0 #samples collected so far
+        self.name = name #assign name to goalkeeper
 
-    def pull(self):
-        #draw a 1 with probability p
+    def face_shot(self):
+        #save the shot (1) with probability p
         return np.random.random() < self.p
     
     def update(self, x):
@@ -373,57 +298,78 @@ class Bandit:
 # COMMAND ----------
 
 def experiment():
-    bandits = [Bandit(p) for p in bandit_probs]
+    #get a list of all goalkeepers
+    gks = [Goalkeeper(p, name) for p, name in zip(gk_save_rates, gk_names)]
 
-    rewards = np.zeros(num_trials)
+    #initialize results (0 is a goal, 1 is a save)
+    results = np.zeros(num_trials)
+
+    #track number of times we explore vs. exploit
     num_times_explored = 0
     num_times_exploited = 0
-    num_optimal = 0
-    optimal_j = np.argmax([b.p for b in bandits]) #you won't know this in real life
-    print("optimal j:", optimal_j)
+    #track number of times we selected the best gk to face a shot
+    num_best_gk = 0
+    best_gk_j = np.argmax([gk.p for gk in gks]) #we don't know this in real life
+    print('Best GK: ', [gk.name for gk in gks][np.argmax([gk.p for gk in gks])])
+    print()
 
+    #The goalkeepers will face a number of shots
     for i in range(num_trials):
+        #SELECT GK
 
+        #if the random value is less than epsilon, we explore by choosing a goalkeeper at random 
         if np.random.random() < eps:
-            num_times_explored += 1
-            j = np.random.randint(len(bandits))
-        else:
-            num_times_exploited += 1
-            j = np.argmax([b.p_estimate for b in bandits])
+            num_times_explored += 1 #track explore
+            gk_selected = np.random.randint(len(gks)) #choose a goalkeeper at random
+        else: #otherwise use the best gk
+            num_times_exploited += 1 #track exploit
+            gk_selected = np.argmax([gk.p_estimate for gk in gks]) #choose gk with current best rate
 
-        if j == optimal_j:
-            num_optimal += 1
+        if gk_selected == best_gk_j:
+            num_best_gk += 1
 
-        #get a reward
-        x = bandits[j].pull()
+        #FACE THE SHOT
 
-        #udpate reward array
-        rewards[i] = x
+        #face the shot. 1 if a save, 0 if a goal
+        save = gks[gk_selected].face_shot()
+        #udpate results array
+        results[i] = save
+        #update the estimate of gk save rate
+        gks[gk_selected].update(save)
 
-        #update the bandit
-        bandits[j].update(x)
+    
+    #PRINT EXPERIMENT RESULTS
+    print(f"{'Goalkeeper':<15} {'True Save Rate':<15} {'Shots Faced':<5} {'Est. Save Rate':<5}")
+    for gk in gks:
+        print(f'{gk.name:<15} {gk.p:<15} {gk.N:<5} {round(gk.p_estimate,3):<5}')
 
+    print()
+    print('Summary Stats')
+    print('Total Saves:', results.sum())
+    print('Overall Save Rate:', results.sum() / num_trials)
+    print('Times Explored:', num_times_explored)
+    print('Times Exploited:', num_times_exploited)
+    print(f'Times {[gk.name for gk in gks][np.argmax([gk.p for gk in gks])]} faced the shot:', num_best_gk)
 
-    #coll info
-    for b in bandits:
-        print('mean estimate:', b.p_estimate)
-
-    print('total reward earned:', rewards.sum())
-    print('overall win rate:', rewards.sum() / num_trials)
-    print('times explored:', num_times_explored)
-    print('times exploited:', num_times_exploited)
-    print('times used optimal:', num_optimal)
-
-    cumulative_rewards = np.cumsum(rewards)
-    win_rates = cumulative_rewards / (np.arange(num_trials) + 1)
-    plt.plot(win_rates)
-    plt.plot(np.ones(num_trials)*np.max(bandit_probs))
-    plt.show()
+    # cumulative_rewards = np.cumsum(rewards)
+    # win_rates = cumulative_rewards / (np.arange(num_trials) + 1)
+    # plt.plot(win_rates)
+    # plt.plot(np.ones(num_trials)*np.max(bandit_probs))
+    # plt.show()
 
 # COMMAND ----------
+
+num_trials = 500
+eps = 0.1
+gk_save_rates = [0.2, 0.25, 0.3]
+gk_names = ['Buffon', 'Casillas', 'Neuer']
+
+# COMMAND ----------
+
+np.random.seed(33346383)  # Set the seed for reproducibility
 
 experiment()
 
 # COMMAND ----------
 
-
+results
