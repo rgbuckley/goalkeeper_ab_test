@@ -268,12 +268,20 @@ t_experiment('Buffon', buffon_rate, 'Casillas', casillas_rate, n, 123)
 
 # COMMAND ----------
 
+import pandas as pd
+import matplotlib.pyplot as plt
+
+# COMMAND ----------
+
 # MAGIC %md
 # MAGIC ## Epsilon Greedy
 
 # COMMAND ----------
 
-
+# MAGIC %md
+# MAGIC The coach designs an experiment. She will epsilon greedy for 100 trials with epsilon 0.1
+# MAGIC
+# MAGIC We know experimental results can be quite random, so we set up a simulation
 
 # COMMAND ----------
 
@@ -297,14 +305,155 @@ class Goalkeeper:
 
 # COMMAND ----------
 
-def experiment():
+def experiment(num_trials, epsilon):
     #get a list of all goalkeepers
     gks = [Goalkeeper(p, name) for p, name in zip(gk_save_rates, gk_names)]
 
-    #initialize results (0 is a goal, 1 is a save)
-    results = np.zeros(num_trials)
+    #initialize results
+    trial_ids = []
+    exploit_results = []
+    gk_results = []
+    save_results = []
+     
+    #For each trial in the experiment, decided whether to exploit, select your gk, and face the shot
+    for i in range(num_trials):
+        #SELECT GK
+        trial_ids.append(i+1)
 
-    #track number of times we explore vs. exploit
+        #if the random value is less than epsilon, we explore by choosing a goalkeeper at random 
+        if np.random.random() < epsilon:
+            exploit_results.append(False) #record explore
+            gk_selected = np.random.randint(len(gks)) #choose a goalkeeper at random
+            gk_results.append(gks[gk_selected].name) #record which gk we selected
+        else: #otherwise use the best gk
+            exploit_results.append(True) #recrod exploit
+            gk_selected = np.argmax([gk.p_estimate for gk in gks]) #choose gk with current best rate
+            gk_results.append(gks[gk_selected].name) #record which gk we selected
+
+        #FACE THE SHOT
+
+        #face the shot. 1 if a save, 0 if a goal
+        save = gks[gk_selected].face_shot()
+        #udpate results array
+        save_results.append(save)
+        #update the estimate of gk save rate
+        gks[gk_selected].update(save)
+
+    #determine array of optimal choice
+    opt = gks[np.argmax([gk.p for gk in gks])].name #optimal gk
+    opt_results = [g == opt for g in gk_results]
+    
+    #compile results in a dataframe
+    df = pd.DataFrame({
+        'trial_id': trial_ids,
+        'exploit': exploit_results,
+        'goalkeeper': gk_results,
+        'save': save_results,
+        'optimal_goalkeeper': opt_results,
+        })
+    df['cumulative_optimal_goalkeeper'] = df['optimal_goalkeeper'].cumsum()
+    df['cumulative_optimal_rate'] = df['cumulative_optimal_goalkeeper'] / df['trial_id']
+    df['cumulative_saves'] = df['save'].cumsum()
+    df['cumulative_save_rate'] = df['cumulative_saves'] / df['trial_id']
+    df['target_save_rate'] = np.max([gk.p for gk in gks])
+    #record parameters
+    df['num_trials'] = num_trials
+    df['epsilon'] = epsilon
+
+    return df
+
+# COMMAND ----------
+
+def simulation(num_experiments):
+    #initialize df
+    i = 1
+    np.random.seed(i) #set seed
+    sim_df = experiment(1000, .1)
+    sim_df['experiment_id'] = i
+
+    #iterate through other trials
+    for i in range(1, num_experiments):
+        np.random.seed(i+1)  #set seed
+        df = experiment(1000, .1)
+        df['experiment_id'] = i+1
+        sim_df = pd.concat([sim_df, df])
+
+    return sim_df
+
+
+# COMMAND ----------
+
+df = simulation(25)
+
+# COMMAND ----------
+
+df_grp = (
+    df
+    .groupby('trial_id')
+    .agg(
+        optimal_rate=('cumulative_optimal_rate', 'mean'),
+        optimal_rate_std=('cumulative_optimal_rate', 'std'),
+        save_rate=('cumulative_save_rate', 'mean'),
+        save_rate_std=('cumulative_save_rate', 'std'),
+        target_save_rate=('target_save_rate', 'max')
+        )
+)
+
+# COMMAND ----------
+
+df_grp = df_grp.reset_index()
+
+df_grp['save_rate_max'] = df_grp['save_rate'] + df_grp['save_rate_std']
+df_grp['save_rate_min'] = df_grp['save_rate'] - df_grp['save_rate_std']
+
+# COMMAND ----------
+
+fig, ax = plt.subplots(figsize=(10, 6))
+
+# Plot save_rate and target_save_rate
+ax.plot(df_grp["trial_id"], df_grp["save_rate"], label='Save Rate')
+ax.plot(df_grp["trial_id"], df_grp["target_save_rate"], label='Target Save Rate')
+
+# Shade between save_rate_max and save_rate_min
+ax.fill_between(df_grp["trial_id"], df_grp["save_rate_min"], df_grp["save_rate_max"], color='gray', alpha=0.5, label='Confidence Interval')
+
+ax.set_xlabel('Trial ID')
+ax.set_ylabel('Mean Cumulative Save Rate')
+ax.set_title('Cumulative Save Rate by Experiment Over Trials', fontsize=14)
+ax.legend()
+
+plt.show()
+
+# COMMAND ----------
+
+# Assuming 'experiment_id' is a column in the dataframe and each 'experiment_id' represents a different experiment
+# We will plot each experiment as a separate line in the plot
+
+fig, ax = plt.subplots(figsize=(10, 6))
+
+# Get unique experiment IDs
+experiment_ids = df['experiment_id'].unique()
+
+# Loop through each experiment ID and plot it
+for experiment_id in experiment_ids:
+    subset_df = df[df['experiment_id'] == experiment_id]
+    ax.plot(subset_df["trial_id"], subset_df["cumulative_save_rate"], label=f'Experiment {experiment_id}')
+
+ax.plot(df["trial_id"], df["target_save_rate"], label='target')
+ax.set_xlabel('Trial ID')
+ax.set_ylabel('Cumulative Save Rate')
+ax.set_title('Cumulative Save Rate by Experiment Over Trials', fontsize=14)
+# ax.legend()
+
+plt.show()
+
+# COMMAND ----------
+
+
+
+# COMMAND ----------
+
+#track number of times we explore vs. exploit
     num_times_explored = 0
     num_times_exploited = 0
     #track number of times we selected the best gk to face a shot
@@ -313,32 +462,7 @@ def experiment():
     print('Best GK: ', [gk.name for gk in gks][np.argmax([gk.p for gk in gks])])
     print()
 
-    #The goalkeepers will face a number of shots
-    for i in range(num_trials):
-        #SELECT GK
-
-        #if the random value is less than epsilon, we explore by choosing a goalkeeper at random 
-        if np.random.random() < eps:
-            num_times_explored += 1 #track explore
-            gk_selected = np.random.randint(len(gks)) #choose a goalkeeper at random
-        else: #otherwise use the best gk
-            num_times_exploited += 1 #track exploit
-            gk_selected = np.argmax([gk.p_estimate for gk in gks]) #choose gk with current best rate
-
-        if gk_selected == best_gk_j:
-            num_best_gk += 1
-
-        #FACE THE SHOT
-
-        #face the shot. 1 if a save, 0 if a goal
-        save = gks[gk_selected].face_shot()
-        #udpate results array
-        results[i] = save
-        #update the estimate of gk save rate
-        gks[gk_selected].update(save)
-
-    
-    #PRINT EXPERIMENT RESULTS
+        #PRINT EXPERIMENT RESULTS
     print(f"{'Goalkeeper':<15} {'True Save Rate':<15} {'Shots Faced':<5} {'Est. Save Rate':<5}")
     for gk in gks:
         print(f'{gk.name:<15} {gk.p:<15} {gk.N:<5} {round(gk.p_estimate,3):<5}')
