@@ -72,21 +72,18 @@
 # COMMAND ----------
 
 # MAGIC %md
-# MAGIC The coach wants to know which goalkeeper (Buffon or Casillas) has a higher *save rate*. The coach plans an experiment.
+# MAGIC The coach has two goalkeepers on her roster: Buffon and Casillas. She wants to know which goalkeeper has a higher *save rate*. The coach plans an experiment.
 # MAGIC
 # MAGIC > During training sessions, each goalkeeper will face a number of penalty kick shots from several different shooters. The coach will record whether each shot is saved and use this data to determine which goalkeeper has the higher save rate or if they are the same.
 
 # COMMAND ----------
 
 # MAGIC %md
-# MAGIC The coach knows that the average save rate among all goalkeepers is about [25%](https://theanalyst.com/2024/05/premier-league-penalties-like-free-goal). The coach reasons that it is important to be able to detect a difference of 5% or greater between the true save rates of each goalkeeper.
+# MAGIC *How many shots should each goalkeeper face during the experiment?*
 # MAGIC
-# MAGIC To ensure the experiment picks up the difference (if it exists), *how many shots should each goalkeeper face?*
-
-# COMMAND ----------
-
-# MAGIC %md
-# MAGIC The coach is not sure how to answer that question. She googles around online and lands on this [calculator](https://www2.ccrb.cuhk.edu.hk/stat/proportion/Casagrande.htm) from the center for clinical research and biostats. 
+# MAGIC The coach knows that the average save rate among all goalkeepers is about [25%](https://theanalyst.com/2024/05/premier-league-penalties-like-free-goal). She reasons that it is important to be able to detect a difference of 5% or greater between the true save rates of each goalkeeper. 
+# MAGIC
+# MAGIC To decide how many shots each goalkeeper should face, the coach googles around online and lands on this [calculator](https://www2.ccrb.cuhk.edu.hk/stat/proportion/Casagrande.htm) from the center for clinical research and biostats. 
 
 # COMMAND ----------
 
@@ -223,7 +220,9 @@ t_experiment('Buffon', buffon_rate, 'Casillas', casillas_rate, n, 123)
 # COMMAND ----------
 
 # MAGIC %md 
-# MAGIC Our test clearly picks up the difference. But we could have gotten the same information in far fewer trials, with each goalkeeper facing only 40 shots (2% of the original planned experiment)
+# MAGIC Our experiment clearly picks up the difference. But did we need to shoot nearly 4000 penalty kicks to learn that Casillas is superior? 
+# MAGIC
+# MAGIC No. We could have gotten the same information with each goalkeeper facing only 40 shots (2% of the original planned experiment)
 
 # COMMAND ----------
 
@@ -250,9 +249,9 @@ t_experiment('Buffon', buffon_rate, 'Casillas', casillas_rate, n, 123)
 # MAGIC %md
 # MAGIC This exposes a tension called *The Explore Exploit Dilemma*.
 # MAGIC
-# MAGIC On one hand we want to explore and collect more data (have both goalkeepers face more shots).
+# MAGIC On one hand we want to **_explore_** and collect more data (have both goalkeepers face more shots).
 # MAGIC
-# MAGIC On the other hand, we want to exploit and make sure the better goalkeeper faces as many shots as possible, since he will save more.
+# MAGIC On the other hand, we want to _**exploit**_ and make sure the better goalkeeper faces as many shots as possible, since he will save more.
 # MAGIC
 # MAGIC Our first approach does not handle this tension in a satisfactory way. Let's turn to a new way of thinking.
 
@@ -264,48 +263,71 @@ t_experiment('Buffon', buffon_rate, 'Casillas', casillas_rate, n, 123)
 # COMMAND ----------
 
 # MAGIC %md
-# MAGIC The coach asks her assistant if there is a better option for an experiment
+# MAGIC The team has made a couple additions to its roster. First, the team has added a new goalkeeper named Neuer. The coach now has to select between the three goalkeepers which has the best save rate.
+# MAGIC
+# MAGIC The team has also added an analyst to use data to improve performance. The coach meets with the analyst and pitches him the problem of deciding which goalkeeper has the highest save rate. The coach wants to vet what the analyst suggests before doing the experiment, so they decide to simulate the analyst's approach and talk about the results.
+
+# COMMAND ----------
+
+# MAGIC %md
+# MAGIC The analyst proposes this experiment.
+# MAGIC
+# MAGIC > Assume all goalkeepers have a save rate of 0. We then select a random number between 1 and 10.
+# MAGIC - If we select 1, choose a goalkeeper at random and have them face the next shot. Update our estimated save rate for that goalkeeper based on if they save the shot or not.
+# MAGIC - If we select a number between 2 and 10, choose the goalkeeper with the highest estimated save rate to face the next shot. Update our estimated save rate for that goalkeeper based on if they save the shot or not.  
+
+# COMMAND ----------
+
+# MAGIC %md
+# MAGIC ## Simulation
 
 # COMMAND ----------
 
 import pandas as pd
 import matplotlib.pyplot as plt
 
+blue = '#0358B4' #italian blue
+red = '#F81635' #spanish red
+pink = '#F180C7' #german alternate pink
+black = '#000000'
+gray =  '#BCC3C1'
+
 # COMMAND ----------
 
 # MAGIC %md
-# MAGIC ## Epsilon Greedy
-
-# COMMAND ----------
-
-# MAGIC %md
-# MAGIC The coach designs an experiment. She will epsilon greedy for 100 trials with epsilon 0.1
-# MAGIC
-# MAGIC We know experimental results can be quite random, so we set up a simulation
+# MAGIC ### Code to Run Simulation
 
 # COMMAND ----------
 
 #set up a class to model each goalkeeper
 class Goalkeeper:
     def __init__(self, p, name):
-        #p is the true save rate
-        self.p = p
+        self.p = p #p is the true save rate
         self.p_estimate = 0 #start with an estimate of 0
         self.N = 0 #samples collected so far
         self.name = name #assign name to goalkeeper
 
     def face_shot(self):
-        #save the shot (1) with probability p
+        #save the shot with probability p
         return np.random.random() < self.p
     
     def update(self, x):
         #x is 0 or 1
-        self.N += 1
-        self.p_estimate = ((self.N - 1)*self.p_estimate + x) / self.N
+        self.N += 1 #record the faced shot
+        self.p_estimate = ((self.N - 1)*self.p_estimate + x) / self.N #update our estimate of p
 
 # COMMAND ----------
 
 def experiment(num_trials, epsilon):
+    """
+    Run an epsilon-greedy experiment
+
+    num_trials (int): the number of trials in the experiment
+    epsilon (float): the probability of exploration, needs to be between 0 and 1
+
+    df (dataframe): the results of the experiment 
+    """
+
     #get a list of all goalkeepers
     gks = [Goalkeeper(p, name) for p, name in zip(gk_save_rates, gk_names)]
 
@@ -314,11 +336,13 @@ def experiment(num_trials, epsilon):
     exploit_results = []
     gk_results = []
     save_results = []
+    p_est_results = []
+    chosen_results = []
      
     #For each trial in the experiment, decided whether to exploit, select your gk, and face the shot
     for i in range(num_trials):
         #SELECT GK
-        trial_ids.append(i+1)
+        trial_ids.append(i+1) #record trial id
 
         #if the random value is less than epsilon, we explore by choosing a goalkeeper at random 
         if np.random.random() < epsilon:
@@ -338,6 +362,10 @@ def experiment(num_trials, epsilon):
         save_results.append(save)
         #update the estimate of gk save rate
         gks[gk_selected].update(save)
+        #record estimates
+        p_est_results.append([gk.p_estimate for gk in gks])
+        #record chosen gk after this trial
+        chosen_results.append(gks[np.argmax([gk.p_estimate for gk in gks])].name)
 
     #determine array of optimal choice
     opt = gks[np.argmax([gk.p for gk in gks])].name #optimal gk
@@ -345,12 +373,22 @@ def experiment(num_trials, epsilon):
     
     #compile results in a dataframe
     df = pd.DataFrame({
-        'trial_id': trial_ids,
-        'exploit': exploit_results,
-        'goalkeeper': gk_results,
-        'save': save_results,
-        'optimal_goalkeeper': opt_results,
-        })
+        **{
+            'trial_id': trial_ids,
+            'exploit': exploit_results,
+            'goalkeeper': gk_results,
+            'optimal_goalkeeper': opt_results,
+            'save': save_results,
+            },
+        **{gks[i].name+'_est_p': [x[i] for x in p_est_results] for i in range(len(gks))},
+        **{
+            'top_goalkeeper': chosen_results,
+            }
+        }
+                      )
+    
+    df['cumulative_exploit'] = df['exploit'].cumsum()
+    df['cumulative_exploit_rate'] = df['cumulative_exploit'] / df['trial_id']
     df['cumulative_optimal_goalkeeper'] = df['optimal_goalkeeper'].cumsum()
     df['cumulative_optimal_rate'] = df['cumulative_optimal_goalkeeper'] / df['trial_id']
     df['cumulative_saves'] = df['save'].cumsum()
@@ -359,22 +397,33 @@ def experiment(num_trials, epsilon):
     #record parameters
     df['num_trials'] = num_trials
     df['epsilon'] = epsilon
+    df['exploit_rate'] = 1-epsilon
 
     return df
 
 # COMMAND ----------
 
-def simulation(num_experiments):
+def simulation(num_experiments, num_trials, epsilon):
+    """
+    Run a simulation of epsilon greedy experiments
+
+    num_experiments (int): the number of experiments in the simulation
+    num_trials (int): the number of trials per experiment
+    epsilon (float): the probability of exploration, needs to be between 0 and 1
+
+    sim_df (dataframe): the results of the simulation 
+    """
+
     #initialize df
     i = 1
     np.random.seed(i) #set seed
-    sim_df = experiment(1000, .1)
+    sim_df = experiment(num_trials, epsilon)
     sim_df['experiment_id'] = i
 
     #iterate through other trials
     for i in range(1, num_experiments):
         np.random.seed(i+1)  #set seed
-        df = experiment(1000, .1)
+        df = experiment(num_trials, epsilon)
         df['experiment_id'] = i+1
         sim_df = pd.concat([sim_df, df])
 
@@ -383,7 +432,63 @@ def simulation(num_experiments):
 
 # COMMAND ----------
 
-df = simulation(25)
+# MAGIC %md
+# MAGIC ### Code to Plot Results
+
+# COMMAND ----------
+
+def plot_exploit_rate_experiment(df):
+    """
+    Given a dataframe output from a single experiment, plot the cumulative exploit rate
+    """
+
+    fig, ax = plt.subplots(figsize=(10, 6))
+
+    #plot target and actual exploit rates
+    ax.plot(df["trial_id"], df["cumulative_exploit_rate"], label='Actual Exploit Rate', color=black)
+    ax.plot(df["trial_id"], df["exploit_rate"], label='Target Exploit Rate', color=gray, linestyle="--")
+
+    #y should be betwee 0 and 1
+    ax.set_ylim(0, 1) 
+
+    #labels
+    ax.set_xlabel('Trial ID')
+    ax.set_ylabel('Actual Exploit Rate')
+    ax.set_title('Cumulative Actual Exploit Rate over Trials', fontsize=14, loc='left')
+    ax.legend()
+
+    plt.show()
+
+# COMMAND ----------
+
+# MAGIC %md
+# MAGIC ### Run Simulation
+
+# COMMAND ----------
+
+num_experiments = 100
+num_trials = 1000
+eps = 0.1
+gk_save_rates = [0.2, 0.25, 0.3]
+gk_names = ['Buffon', 'Casillas', 'Neuer']
+
+df_sim = simulation(num_experiments,num_trials,eps)
+
+# COMMAND ----------
+
+df_exp = df_sim[df_sim['experiment_id']==33]
+
+# COMMAND ----------
+
+plot_exploit_rate_experiment(df_exp)
+
+# COMMAND ----------
+
+
+
+# COMMAND ----------
+
+
 
 # COMMAND ----------
 
@@ -493,7 +598,3 @@ gk_names = ['Buffon', 'Casillas', 'Neuer']
 np.random.seed(33346383)  # Set the seed for reproducibility
 
 experiment()
-
-# COMMAND ----------
-
-results
