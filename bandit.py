@@ -287,8 +287,11 @@ import pandas as pd
 import matplotlib.pyplot as plt
 
 blue = '#0358B4' #italian blue
+blue_shade = '#afd5fe'
 red = '#F81635' #spanish red
-pink = '#F180C7' #german alternate pink
+red_shade = '#fc9ca9'
+teal = '#056E73' #german retro teal
+teal_shade = '#89f4fa'
 black = '#000000'
 gray =  '#BCC3C1'
 
@@ -387,18 +390,25 @@ def experiment(num_trials, epsilon):
         }
                       )
     
+    #add true save rates
+    for g in gks:
+        df[g.name+'_p'] = g.p
+    
+    #Add cumulative results
     df['cumulative_exploit'] = df['exploit'].cumsum()
     df['cumulative_exploit_rate'] = df['cumulative_exploit'] / df['trial_id']
+    df['target_exploit_rate'] = 1-epsilon
     df['cumulative_optimal_goalkeeper'] = df['optimal_goalkeeper'].cumsum()
     df['cumulative_optimal_rate'] = df['cumulative_optimal_goalkeeper'] / df['trial_id']
+    df['target_optimal_rate'] = 1
     df['cumulative_saves'] = df['save'].cumsum()
     df['cumulative_save_rate'] = df['cumulative_saves'] / df['trial_id']
     df['target_save_rate'] = np.max([gk.p for gk in gks])
+    
     #record parameters
     df['num_trials'] = num_trials
     df['epsilon'] = epsilon
-    df['exploit_rate'] = 1-epsilon
-
+    
     return df
 
 # COMMAND ----------
@@ -442,11 +452,11 @@ def plot_exploit_rate_experiment(df):
     Given a dataframe output from a single experiment, plot the cumulative exploit rate
     """
 
-    fig, ax = plt.subplots(figsize=(10, 6))
+    fig, ax = plt.subplots(figsize=(6, 4))
 
     #plot target and actual exploit rates
     ax.plot(df["trial_id"], df["cumulative_exploit_rate"], label='Actual Exploit Rate', color=black)
-    ax.plot(df["trial_id"], df["exploit_rate"], label='Target Exploit Rate', color=gray, linestyle="--")
+    ax.plot(df["trial_id"], df["target_exploit_rate"], label='Target Exploit Rate', color=gray, linestyle="--")
 
     #y should be betwee 0 and 1
     ax.set_ylim(0, 1) 
@@ -454,8 +464,56 @@ def plot_exploit_rate_experiment(df):
     #labels
     ax.set_xlabel('Trial ID')
     ax.set_ylabel('Actual Exploit Rate')
-    ax.set_title('Cumulative Actual Exploit Rate over Trials', fontsize=14, loc='left')
-    ax.legend()
+    ax.set_title('Cumulative Exploit Rate over Trials', fontsize=10, loc='left')
+    ax.legend(fontsize=8)
+
+    plt.show()
+
+# COMMAND ----------
+
+def plot_save_rate_experiment(df):
+    """
+    Given a dataframe output from a single experiment, plot the cumulative save rate
+    """
+
+    fig, ax = plt.subplots(figsize=(6, 4))
+
+    #plot target and actual exploit rates
+    ax.plot(df["trial_id"], df["cumulative_save_rate"], label='Actual Save Rate', color=black)
+    ax.plot(df["trial_id"], df["target_save_rate"], label='Target Save Rate', color=gray, linestyle="--")
+
+    #y should be betwee 0 and 1
+    ax.set_ylim(0, 1) 
+
+    #labels
+    ax.set_xlabel('Trial ID')
+    ax.set_ylabel('Actual Save Rate')
+    ax.set_title('Cumulative Save Rate over Trials', fontsize=10, loc='left')
+    ax.legend(fontsize=8)
+
+    plt.show()
+
+# COMMAND ----------
+
+def plot_optimal_rate_experiment(df):
+    """
+    Given a dataframe output from a single experiment, plot the cumulative optimal rate
+    """
+
+    fig, ax = plt.subplots(figsize=(6, 4))
+
+    #plot target and actual exploit rates
+    ax.plot(df["trial_id"], df["cumulative_optimal_rate"], label='Actual Optimal Rate', color=black)
+    ax.plot(df["trial_id"], df["target_optimal_rate"], label='Target Optimal Rate', color=gray, linestyle="--")
+
+    #y should be betwee 0 and 1
+    ax.set_ylim(0, 1.05) 
+
+    #labels
+    ax.set_xlabel('Trial ID')
+    ax.set_ylabel('Actual Optimal Rate')
+    ax.set_title('Cumulative Optimal Rate over Trials', fontsize=10, loc='left')
+    ax.legend(fontsize=8)
 
     plt.show()
 
@@ -484,11 +542,130 @@ plot_exploit_rate_experiment(df_exp)
 
 # COMMAND ----------
 
+plot_save_rate_experiment(df_exp)
 
+# COMMAND ----------
+
+plot_optimal_rate_experiment(df_exp)
+
+# COMMAND ----------
+
+df_exp
+
+# COMMAND ----------
+
+fig, ax = plt.subplots(figsize=(6, 4))
+
+#plot target and actual exploit rates
+ax.plot(df_exp["trial_id"], df_exp["Buffon_est_p"], label='Buffon Estimated Save Rate', color=blue_shade)
+ax.plot(df_exp["trial_id"], df_exp["Buffon_p"], label='Buffon True Save Rate', color=blue, linestyle="--")
+
+ax.plot(df_exp["trial_id"], df_exp["Casillas_est_p"], label='Casillas Estimated Save Rate', color=red_shade)
+ax.plot(df_exp["trial_id"], df_exp["Casillas_p"], label='Casillas True Save Rate', color=red, linestyle="--")
+
+ax.plot(df_exp["trial_id"], df_exp["Neuer_est_p"], label='Neuer Estimated Save Rate', color=teal_shade)
+ax.plot(df_exp["trial_id"], df_exp["Neuer_p"], label='Neuer True Save Rate', color=teal, linestyle="--")
+
+#y should be betwee 0 and 1
+ax.set_ylim(0, 1) 
+
+#labels
+ax.set_xlabel('Trial ID')
+ax.set_ylabel('Save Rate')
+ax.set_title('Estimated Save Rates over Trials', fontsize=10, loc='left')
+ax.legend(fontsize=8)
+
+plt.show()
+
+# COMMAND ----------
+
+df_test2 = df_exp[df_exp['trial_id'] < 201]
+
+# COMMAND ----------
+
+df_test3 = pd.concat([df_test, df_test2])
+
+# COMMAND ----------
+
+df_test3
 
 # COMMAND ----------
 
 
+
+# COMMAND ----------
+
+for i, r in df_test3.iterrows():
+    print(i,r)
+
+# COMMAND ----------
+
+# Assuming 'top_goalkeeper' column contains categorical values that we want to color by, 'trial_id' ranges from 1 to 1000, and 'experiment_id' identifies a row
+
+colors = ['blue', 'red', 'teal']
+color_map = dict(zip(gk_names, colors))
+
+# Create a dataframe for the heatmap with 2 rows for each 'experiment_id'
+experiment_ids = df_test3['experiment_id'].unique()
+heatmap_data = pd.DataFrame(index=experiment_ids, columns=np.arange(1, 201))
+
+# Fill the dataframe based on 'top_goalkeeper' column
+for index, row in df_test3.iterrows():
+    goalkeeper = row['top_goalkeeper']
+    trial_id = row['trial_id']
+    experiment_id = row['experiment_id']
+    heatmap_data.loc[experiment_id, trial_id] = color_map[goalkeeper]
+
+# Convert colors to numeric values for heatmap
+color_to_num = {color: i for i, color in enumerate(colors)}
+heatmap_data_numeric = heatmap_data.replace(color_to_num)
+
+# Plotting
+fig, ax = plt.subplots(figsize=(15, 2))
+sns.heatmap(heatmap_data_numeric, cmap=colors, cbar=False, ax=ax, linewidths=0.5, linecolor='gray')
+
+# Label each row with experiment id
+ax.set_yticklabels(ax.get_yticklabels(), rotation=0)
+ax.set_ylabel('Experiment ID')
+
+# Label every 10th column with trial id
+ax.set_xticks(range(0, 200, 10))
+ax.set_xticklabels(range(0, 200, 10), rotation=0)
+ax.set_xlabel('Trial ID')
+
+ax.set_title('Distribution of Top Goalkeepers across Trials')
+
+plt.show()
+
+# COMMAND ----------
+
+ax.get_xticklabels()
+
+# COMMAND ----------
+
+a = 
+
+# COMMAND ----------
+
+a
+
+# COMMAND ----------
+
+import matplotlib.pyplot as plt
+
+# Create a Text object
+text_obj = plt.text(x=0.5, y=0.5, s='Hello World')
+
+# Display the plot
+plt.show()
+
+# COMMAND ----------
+
+heatmap_data_numeric
+
+# COMMAND ----------
+
+df_exp['test'] = 45
 
 # COMMAND ----------
 
