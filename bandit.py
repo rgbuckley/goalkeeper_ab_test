@@ -285,15 +285,20 @@ t_experiment('Buffon', buffon_rate, 'Casillas', casillas_rate, n, 123)
 
 import pandas as pd
 import matplotlib.pyplot as plt
+import seaborn as sns
 
+#goalkeeper colors
 blue = '#0358B4' #italian blue
 blue_shade = '#afd5fe'
 red = '#F81635' #spanish red
 red_shade = '#fc9ca9'
 teal = '#056E73' #german retro teal
-teal_shade = '#89f4fa'
-black = '#000000'
-gray =  '#BCC3C1'
+teal_shade = '#89fad8'
+
+#generic colors
+black = '#000000' #actuals
+gray =  '#BCC3C1' #uncertainty
+orange = '#FF7F0E' #target
 
 # COMMAND ----------
 
@@ -447,6 +452,11 @@ def simulation(num_experiments, num_trials, epsilon):
 
 # COMMAND ----------
 
+# MAGIC %md
+# MAGIC #### Experiment
+
+# COMMAND ----------
+
 def plot_exploit_rate_experiment(df):
     """
     Given a dataframe output from a single experiment, plot the cumulative exploit rate
@@ -456,7 +466,7 @@ def plot_exploit_rate_experiment(df):
 
     #plot target and actual exploit rates
     ax.plot(df["trial_id"], df["cumulative_exploit_rate"], label='Actual Exploit Rate', color=black)
-    ax.plot(df["trial_id"], df["target_exploit_rate"], label='Target Exploit Rate', color=gray, linestyle="--")
+    ax.plot(df["trial_id"], df["target_exploit_rate"], label='Target Exploit Rate', color=orange, linestyle="--")
 
     #y should be betwee 0 and 1
     ax.set_ylim(0, 1) 
@@ -480,7 +490,7 @@ def plot_save_rate_experiment(df):
 
     #plot target and actual exploit rates
     ax.plot(df["trial_id"], df["cumulative_save_rate"], label='Actual Save Rate', color=black)
-    ax.plot(df["trial_id"], df["target_save_rate"], label='Target Save Rate', color=gray, linestyle="--")
+    ax.plot(df["trial_id"], df["target_save_rate"], label='Target Save Rate', color=orange, linestyle="--")
 
     #y should be betwee 0 and 1
     ax.set_ylim(0, 1) 
@@ -504,7 +514,7 @@ def plot_optimal_rate_experiment(df):
 
     #plot target and actual exploit rates
     ax.plot(df["trial_id"], df["cumulative_optimal_rate"], label='Actual Optimal Rate', color=black)
-    ax.plot(df["trial_id"], df["target_optimal_rate"], label='Target Optimal Rate', color=gray, linestyle="--")
+    ax.plot(df["trial_id"], df["target_optimal_rate"], label='Target Optimal Rate', color=orange, linestyle="--")
 
     #y should be betwee 0 and 1
     ax.set_ylim(0, 1.05) 
@@ -513,6 +523,397 @@ def plot_optimal_rate_experiment(df):
     ax.set_xlabel('Trial ID')
     ax.set_ylabel('Actual Optimal Rate')
     ax.set_title('Cumulative Optimal Rate over Trials', fontsize=10, loc='left')
+    ax.legend(fontsize=8)
+
+    plt.show()
+
+# COMMAND ----------
+
+def plot_p_est_experiment(df):
+    """
+    Given a dataframe output from a single experiment, plot the estimated and true save rates for each goalkeeper over time
+    """
+
+    fig, ax = plt.subplots(figsize=(6, 4))
+
+    #plot target and actual exploit rates
+    ax.plot(df["trial_id"], df["Buffon_est_p"], label='Buffon Estimated Save Rate', color=blue_shade)
+    ax.plot(df["trial_id"], df["Buffon_p"], label='Buffon True Save Rate', color=blue, linestyle="--")
+
+    ax.plot(df["trial_id"], df["Casillas_est_p"], label='Casillas Estimated Save Rate', color=red_shade)
+    ax.plot(df["trial_id"], df["Casillas_p"], label='Casillas True Save Rate', color=red, linestyle="--")
+
+    ax.plot(df["trial_id"], df["Neuer_est_p"], label='Neuer Estimated Save Rate', color=teal_shade)
+    ax.plot(df["trial_id"], df["Neuer_p"], label='Neuer True Save Rate', color=teal, linestyle="--")
+
+    #y should be betwee 0 and 1
+    ax.set_ylim(0, 1) 
+
+    #labels
+    ax.set_xlabel('Trial ID')
+    ax.set_ylabel('Save Rate')
+    ax.set_title('Estimated Save Rates over Trials', fontsize=10, loc='left')
+    ax.legend(fontsize=8)
+
+    plt.show()
+
+# COMMAND ----------
+
+def plot_top_goalkeeper_experiment(df):
+    """
+    Given a dataframe output from a single experiment, plot the estimated best goalkeeper over time
+    """
+
+    # PREPARE DATAFRAME
+
+    #map gk_names to colors
+    colors = ['blue', 'red', 'teal']
+    color_map = {'Buffon': colors[0], 'Casillas': colors[1], 'Neuer': colors[2]}
+
+    #create df for heatmap. experiments are rows; columns are trials
+    experiment_ids = df['experiment_id'].unique()
+    trial_ids = df['trial_id'].unique()
+    heatmap_data = pd.DataFrame(index=experiment_ids, columns=trial_ids)
+
+    #fill heatmap using 'top_goalkeeper' column mapped to color
+    for index, row in df.iterrows():
+        goalkeeper = row['top_goalkeeper']
+        trial_id = row['trial_id']
+        experiment_id = row['experiment_id']
+        heatmap_data.loc[experiment_id, trial_id] = color_map[goalkeeper]
+
+    #convert colors to numeric values for heatmap
+    color_to_num = {color: i for i, color in enumerate(colors)}
+    heatmap_data_numeric = heatmap_data.replace(color_to_num)
+
+    # PLOTTING
+
+    #plot heatmap
+    fig, ax = plt.subplots(figsize=(15, 2))
+    sns.heatmap(heatmap_data_numeric, cmap=colors, cbar=False, ax=ax)
+
+    #label experiment id
+    ax.set_yticklabels(ax.get_yticklabels(), rotation=0)
+    ax.set_ylabel('Experiment ID')
+
+    #label every 100th trial id
+    ax.set_xticks(range(0, max(trial_ids), 100))
+    ax.set_xticklabels(range(0, max(trial_ids), 100), rotation=0)
+    ax.set_xlabel('Trial ID')
+
+    #set title
+    ax.set_title('Top Goalkeeper After Each Trial', fontsize=10, loc='left')
+    #add legend
+    handles = [plt.Rectangle((0,0),1,1, color=color_map[gk]) for gk in color_map]
+    ax.legend(handles, color_map.keys(), title="Goalkeepers", bbox_to_anchor=(1.02, 1), loc='upper left')
+
+    plt.show()
+
+# COMMAND ----------
+
+# MAGIC %md
+# MAGIC #### Simulation
+
+# COMMAND ----------
+
+def plot_exploit_rate_simulation(df):
+    """
+    Given a dataframe output from a simulation, plot the cumulative exploit rate
+    """
+
+    #aggregate experiments
+    df_grp = (
+        df
+        .groupby('trial_id')
+        .agg(
+            exploit_rate_mu=('cumulative_exploit_rate', 'mean'),
+            exploit_rate_std=('cumulative_exploit_rate', 'std'),
+            target_exploit_rate=('target_exploit_rate', 'max')
+            )
+    )
+
+    #reset index
+    df_grp = df_grp.reset_index()
+
+    #calculate range
+    df_grp['exploit_rate_max'] = df_grp['exploit_rate_mu'] + df_grp['exploit_rate_std']
+    df_grp['exploit_rate_min'] = df_grp['exploit_rate_mu'] - df_grp['exploit_rate_std']
+
+    #plot data
+    fig, ax = plt.subplots(figsize=(6, 4))
+
+    #plot average and target rates
+    ax.plot(df_grp["trial_id"], df_grp["exploit_rate_mu"], label='Avg. Exploit Rate', color=black)
+    ax.plot(df_grp["trial_id"], df_grp["target_exploit_rate"], label='Target Exploit Rate', color=orange, linestyle="--")
+
+    # Shade between standard deviation
+    ax.fill_between(df_grp["trial_id"], df_grp["exploit_rate_min"], df_grp["exploit_rate_max"], color=gray, label='Std. Dev.')
+
+    #y should be betwee 0 and 1
+    ax.set_ylim(0, 1) 
+
+    #labels
+    ax.set_xlabel('Trial ID')
+    ax.set_ylabel('Exploit Rate')
+    ax.set_title('Estimated Cumulative Exploit Rate over Trials', fontsize=10, loc='left')
+    ax.legend(fontsize=8)
+
+    plt.show()
+
+# COMMAND ----------
+
+def plot_save_rate_simulation(df):
+    """
+    Given a dataframe output from a simulation, plot the cumulative save rate
+    """
+
+    #aggregate experiments
+    df_grp = (
+        df
+        .groupby('trial_id')
+        .agg(
+            save_rate_mu=('cumulative_save_rate', 'mean'),
+            save_rate_std=('cumulative_save_rate', 'std'),
+            target_save_rate=('target_save_rate', 'max')
+            )
+    )
+
+    #reset index
+    df_grp = df_grp.reset_index()
+
+    #calculate range
+    df_grp['save_rate_max'] = df_grp['save_rate_mu'] + df_grp['save_rate_std']
+    df_grp['save_rate_min'] = df_grp['save_rate_mu'] - df_grp['save_rate_std']
+
+    #plot data
+    fig, ax = plt.subplots(figsize=(6, 4))
+
+    #plot average and target rates
+    ax.plot(df_grp["trial_id"], df_grp["save_rate_mu"], label='Avg. Save Rate', color=black)
+    ax.plot(df_grp["trial_id"], df_grp["target_save_rate"], label='Target Save Rate', color=orange, linestyle="--")
+
+    #shade between standard deviation
+    ax.fill_between(df_grp["trial_id"], df_grp["save_rate_min"], df_grp["save_rate_max"], color=gray, label='Std. Dev.')
+
+    #y should be betwee 0 and 1
+    ax.set_ylim(0, 1) 
+
+    #labels
+    ax.set_xlabel('Trial ID')
+    ax.set_ylabel('Save Rate')
+    ax.set_title('Estimated Cumulative Save Rate over Trials', fontsize=10, loc='left')
+    ax.legend(fontsize=8)
+
+    plt.show()
+
+# COMMAND ----------
+
+def plot_optimal_rate_simulation(df):
+    """
+    Given a dataframe output from a simulation, plot the cumulative optimal rate
+    """
+
+    #aggregate experiments
+    df_grp = (
+        df
+        .groupby('trial_id')
+        .agg(
+            optimal_rate_mu=('cumulative_optimal_rate', 'mean'),
+            optimal_rate_std=('cumulative_optimal_rate', 'std'),
+            target_optimal_rate=('target_optimal_rate', 'max')
+            )
+    )
+
+    #reset index
+    df_grp = df_grp.reset_index()
+
+    #calculate range
+    df_grp['optimal_rate_max'] = df_grp['optimal_rate_mu'] + df_grp['optimal_rate_std']
+    df_grp['optimal_rate_min'] = df_grp['optimal_rate_mu'] - df_grp['optimal_rate_std']
+
+    #plot data
+    fig, ax = plt.subplots(figsize=(6, 4))
+
+    #plot average and target rates
+    ax.plot(df_grp["trial_id"], df_grp["optimal_rate_mu"], label='Avg. Optimal Rate', color=black)
+    ax.plot(df_grp["trial_id"], df_grp["target_optimal_rate"], label='Target Optimal Rate', color=orange, linestyle="--")
+
+    #shade between standard deviation
+    ax.fill_between(df_grp["trial_id"], df_grp["optimal_rate_min"], df_grp["optimal_rate_max"], color=gray, label='Std. Dev.')
+
+    #y should be betwee 0 and 1
+    ax.set_ylim(0, 1) 
+
+    #labels
+    ax.set_xlabel('Trial ID')
+    ax.set_ylabel('optimal Rate')
+    ax.set_title('Estimated Cumulative Optimal Rate over Trials', fontsize=10, loc='left')
+    ax.legend(fontsize=8)
+
+    plt.show()
+
+# COMMAND ----------
+
+def plot_p_est_simulation(df):
+    """
+    Given a dataframe output from a simulation, plot the estimated and true save rates for each goalkeeper over time
+    """
+
+    #aggregate experiments
+    df_grp = (
+        df
+        .groupby('trial_id')
+        .agg(
+            Buffon_est_p_mu=('Buffon_est_p', 'mean'),
+            Buffon_est_p_std=('Buffon_est_p', 'std'),
+            Buffon_p=('Buffon_p', 'max'),
+            Casillas_est_p_mu=('Casillas_est_p', 'mean'),
+            Casillas_est_p_std=('Casillas_est_p', 'std'),
+            Casillas_p=('Casillas_p', 'max'),
+            Neuer_est_p_mu=('Neuer_est_p', 'mean'),
+            Neuer_est_p_std=('Neuer_est_p', 'std'),
+            Neuer_p=('Neuer_p', 'max'),
+            )
+    )
+
+    #reset index
+    df_grp = df_grp.reset_index()
+
+    #calculate range
+    df_grp['Buffon_p_max'] = df_grp['Buffon_est_p_mu'] + df_grp['Buffon_est_p_std']
+    df_grp['Buffon_p_min'] = df_grp['Buffon_est_p_mu'] - df_grp['Buffon_est_p_std']
+    df_grp['Casillas_p_max'] = df_grp['Casillas_est_p_mu'] + df_grp['Casillas_est_p_std']
+    df_grp['Casillas_p_min'] = df_grp['Casillas_est_p_mu'] - df_grp['Casillas_est_p_std']
+    df_grp['Neuer_p_max'] = df_grp['Neuer_est_p_mu'] + df_grp['Neuer_est_p_std']
+    df_grp['Neuer_p_min'] = df_grp['Neuer_est_p_mu'] - df_grp['Neuer_est_p_std']
+
+    #plot data
+    fig, ax = plt.subplots(figsize=(6, 4))
+
+    #plot average and target rates
+    ax.plot(df_grp["trial_id"], df_grp["Buffon_est_p_mu"], label='Avg. Buffon Estimated Save Rate', color=blue)
+    ax.plot(df_grp["trial_id"], df_grp["Buffon_p"], label='Buffon True Save Rate', color=gray, linestyle="-.")
+
+    #shade between standard deviation
+    ax.fill_between(df_grp["trial_id"], df_grp["Buffon_p_min"], df_grp["Buffon_p_max"], color=blue_shade, alpha=0.3, label='Buffon Std. Dev.')
+
+    #plot average and target rates
+    ax.plot(df_grp["trial_id"], df_grp["Casillas_est_p_mu"], label='Avg. Casillas Estimated Save Rate', color=red)
+    ax.plot(df_grp["trial_id"], df_grp["Casillas_p"], label='Casillas True Save Rate', color=gray, linestyle=":")
+
+    #shade between standard deviation
+    ax.fill_between(df_grp["trial_id"], df_grp["Casillas_p_min"], df_grp["Casillas_p_max"], color=red_shade, alpha=0.3, label='Casillas Std. Dev.')
+
+    #plot average and target rates
+    ax.plot(df_grp["trial_id"], df_grp["Neuer_est_p_mu"], label='Avg. Neuer Estimated Save Rate', color=teal)
+    ax.plot(df_grp["trial_id"], df_grp["Neuer_p"], label='Neuer True Save Rate', color=gray, linestyle="--")
+
+    #shade between standard deviation
+    ax.fill_between(df_grp["trial_id"], df_grp["Neuer_p_min"], df_grp["Neuer_p_max"], color=teal_shade, alpha=0.3, label='Neuer Std. Dev.')
+
+    #set the y axis as max of upper limit for any goalkeeper
+    y_max = df_grp[['Buffon_p_max', 'Casillas_p_max', 'Neuer_p_max']].max().max() +0.05
+    ax.set_ylim(0, y_max) 
+
+    #labels
+    ax.set_xlabel('Trial ID')
+    ax.set_ylabel('Save Rate')
+    ax.set_title('Estimated Save Rates over Trials', fontsize=10, loc='left')
+    ax.legend(fontsize=8, bbox_to_anchor=(1.02, 1), loc='upper left')
+
+    plt.show()
+
+# COMMAND ----------
+
+def plot_top_goalkeeper_simulation(df):
+    """
+    Given a dataframe output from a simulation, plot the estimated best goalkeeper over time
+    """
+
+    # PREPARE DATAFRAME
+
+    #map gk_names to colors
+    colors = ['blue', 'red', 'teal']
+    color_map = {'Buffon': colors[0], 'Casillas': colors[1], 'Neuer': colors[2]}
+
+    #create df for heatmap. experiments are rows; columns are trials
+    experiment_ids = df['experiment_id'].unique()
+    trial_ids = df['trial_id'].unique()
+    heatmap_data = pd.DataFrame(index=experiment_ids, columns=trial_ids)
+
+    #fill heatmap using 'top_goalkeeper' column mapped to color
+    for index, row in df.iterrows():
+        goalkeeper = row['top_goalkeeper']
+        trial_id = row['trial_id']
+        experiment_id = row['experiment_id']
+        heatmap_data.loc[experiment_id, trial_id] = color_map[goalkeeper]
+
+    #convert colors to numeric values for heatmap
+    color_to_num = {color: i for i, color in enumerate(colors)}
+    heatmap_data_numeric = heatmap_data.replace(color_to_num)
+
+    # PLOTTING
+
+    #plot heatmap
+    fig, ax = plt.subplots(figsize=(15, 5))
+    sns.heatmap(heatmap_data_numeric, cmap=colors, cbar=False, ax=ax)
+
+    #label every 10th experiment id
+    ax.set_yticks(range(0, max(experiment_ids), 10))
+    ax.set_yticklabels(range(0, max(experiment_ids), 10), rotation=0)
+    ax.set_ylabel('Experiment ID')
+
+    #label every 100th trial id
+    ax.set_xticks(range(0, max(trial_ids), 100))
+    ax.set_xticklabels(range(0, max(trial_ids), 100), rotation=0)
+    ax.set_xlabel('Trial ID')
+
+    #set title
+    ax.set_title('Top Goalkeeper After Each Trial', fontsize=10, loc='left')
+    #add legend
+    handles = [plt.Rectangle((0,0),1,1, color=color_map[gk]) for gk in color_map]
+    ax.legend(handles, color_map.keys(), title="Goalkeepers", bbox_to_anchor=(1.02, 1), loc='upper left')
+
+    plt.show()
+
+# COMMAND ----------
+
+def plot_top_goalkeeper_rate_simulation(df):
+    """
+    Given a dataframe output from a simulation, plot the rate that we chose each goalkeeper over time
+    """
+
+    #after each trial, count how many times we woulc pick each goalkeeper
+    df_grp = (
+        df
+        .groupby('trial_id')['top_goalkeeper']
+        .value_counts()
+        .unstack(fill_value=0)
+    )
+
+    #count number of experiments
+    df_grp['experiments'] = df_grp.sum(axis=1)
+
+    for gk in df_sim['top_goalkeeper'].unique():
+        df_grp[gk+'_rate'] = df_grp[gk] / df_grp['experiments']
+
+    df_grp = df_grp.reset_index()
+
+    #plot data
+    fig, ax = plt.subplots(figsize=(6, 4))
+
+    #plot average and target rates
+    ax.plot(df_grp["trial_id"], df_grp["Buffon_rate"], label='Buffon', color=blue)
+    ax.plot(df_grp["trial_id"], df_grp["Casillas_rate"], label='Casillas', color=red)
+    ax.plot(df_grp["trial_id"], df_grp["Neuer_rate"], label='Neuer', color=teal)
+
+    #y should be betwee 0 and 1
+    ax.set_ylim(0, 1) 
+
+    #labels
+    ax.set_xlabel('Trial ID')
+    ax.set_ylabel('Rate Selected')
+    ax.set_title('Selected Rate over Trials', fontsize=10, loc='left')
     ax.legend(fontsize=8)
 
     plt.show()
@@ -550,228 +951,32 @@ plot_optimal_rate_experiment(df_exp)
 
 # COMMAND ----------
 
-df_exp
+plot_p_est_experiment(df_exp)
 
 # COMMAND ----------
 
-fig, ax = plt.subplots(figsize=(6, 4))
-
-#plot target and actual exploit rates
-ax.plot(df_exp["trial_id"], df_exp["Buffon_est_p"], label='Buffon Estimated Save Rate', color=blue_shade)
-ax.plot(df_exp["trial_id"], df_exp["Buffon_p"], label='Buffon True Save Rate', color=blue, linestyle="--")
-
-ax.plot(df_exp["trial_id"], df_exp["Casillas_est_p"], label='Casillas Estimated Save Rate', color=red_shade)
-ax.plot(df_exp["trial_id"], df_exp["Casillas_p"], label='Casillas True Save Rate', color=red, linestyle="--")
-
-ax.plot(df_exp["trial_id"], df_exp["Neuer_est_p"], label='Neuer Estimated Save Rate', color=teal_shade)
-ax.plot(df_exp["trial_id"], df_exp["Neuer_p"], label='Neuer True Save Rate', color=teal, linestyle="--")
-
-#y should be betwee 0 and 1
-ax.set_ylim(0, 1) 
-
-#labels
-ax.set_xlabel('Trial ID')
-ax.set_ylabel('Save Rate')
-ax.set_title('Estimated Save Rates over Trials', fontsize=10, loc='left')
-ax.legend(fontsize=8)
-
-plt.show()
+plot_top_goalkeeper_experiment(df_exp)
 
 # COMMAND ----------
 
-df_test2 = df_exp[df_exp['trial_id'] < 201]
+plot_exploit_rate_simulation(df_sim)
 
 # COMMAND ----------
 
-df_test3 = pd.concat([df_test, df_test2])
+plot_save_rate_simulation(df_sim)
 
 # COMMAND ----------
 
-df_test3
+plot_optimal_rate_simulation(df_sim)
 
 # COMMAND ----------
 
-
-
-# COMMAND ----------
-
-for i, r in df_test3.iterrows():
-    print(i,r)
+plot_p_est_simulation(df_sim)
 
 # COMMAND ----------
 
-# Assuming 'top_goalkeeper' column contains categorical values that we want to color by, 'trial_id' ranges from 1 to 1000, and 'experiment_id' identifies a row
-
-colors = ['blue', 'red', 'teal']
-color_map = dict(zip(gk_names, colors))
-
-# Create a dataframe for the heatmap with 2 rows for each 'experiment_id'
-experiment_ids = df_test3['experiment_id'].unique()
-heatmap_data = pd.DataFrame(index=experiment_ids, columns=np.arange(1, 201))
-
-# Fill the dataframe based on 'top_goalkeeper' column
-for index, row in df_test3.iterrows():
-    goalkeeper = row['top_goalkeeper']
-    trial_id = row['trial_id']
-    experiment_id = row['experiment_id']
-    heatmap_data.loc[experiment_id, trial_id] = color_map[goalkeeper]
-
-# Convert colors to numeric values for heatmap
-color_to_num = {color: i for i, color in enumerate(colors)}
-heatmap_data_numeric = heatmap_data.replace(color_to_num)
-
-# Plotting
-fig, ax = plt.subplots(figsize=(15, 2))
-sns.heatmap(heatmap_data_numeric, cmap=colors, cbar=False, ax=ax, linewidths=0.5, linecolor='gray')
-
-# Label each row with experiment id
-ax.set_yticklabels(ax.get_yticklabels(), rotation=0)
-ax.set_ylabel('Experiment ID')
-
-# Label every 10th column with trial id
-ax.set_xticks(range(0, 200, 10))
-ax.set_xticklabels(range(0, 200, 10), rotation=0)
-ax.set_xlabel('Trial ID')
-
-ax.set_title('Distribution of Top Goalkeepers across Trials')
-
-plt.show()
+plot_top_goalkeeper_simulation(df_sim)
 
 # COMMAND ----------
 
-ax.get_xticklabels()
-
-# COMMAND ----------
-
-a = 
-
-# COMMAND ----------
-
-a
-
-# COMMAND ----------
-
-import matplotlib.pyplot as plt
-
-# Create a Text object
-text_obj = plt.text(x=0.5, y=0.5, s='Hello World')
-
-# Display the plot
-plt.show()
-
-# COMMAND ----------
-
-heatmap_data_numeric
-
-# COMMAND ----------
-
-df_exp['test'] = 45
-
-# COMMAND ----------
-
-df_grp = (
-    df
-    .groupby('trial_id')
-    .agg(
-        optimal_rate=('cumulative_optimal_rate', 'mean'),
-        optimal_rate_std=('cumulative_optimal_rate', 'std'),
-        save_rate=('cumulative_save_rate', 'mean'),
-        save_rate_std=('cumulative_save_rate', 'std'),
-        target_save_rate=('target_save_rate', 'max')
-        )
-)
-
-# COMMAND ----------
-
-df_grp = df_grp.reset_index()
-
-df_grp['save_rate_max'] = df_grp['save_rate'] + df_grp['save_rate_std']
-df_grp['save_rate_min'] = df_grp['save_rate'] - df_grp['save_rate_std']
-
-# COMMAND ----------
-
-fig, ax = plt.subplots(figsize=(10, 6))
-
-# Plot save_rate and target_save_rate
-ax.plot(df_grp["trial_id"], df_grp["save_rate"], label='Save Rate')
-ax.plot(df_grp["trial_id"], df_grp["target_save_rate"], label='Target Save Rate')
-
-# Shade between save_rate_max and save_rate_min
-ax.fill_between(df_grp["trial_id"], df_grp["save_rate_min"], df_grp["save_rate_max"], color='gray', alpha=0.5, label='Confidence Interval')
-
-ax.set_xlabel('Trial ID')
-ax.set_ylabel('Mean Cumulative Save Rate')
-ax.set_title('Cumulative Save Rate by Experiment Over Trials', fontsize=14)
-ax.legend()
-
-plt.show()
-
-# COMMAND ----------
-
-# Assuming 'experiment_id' is a column in the dataframe and each 'experiment_id' represents a different experiment
-# We will plot each experiment as a separate line in the plot
-
-fig, ax = plt.subplots(figsize=(10, 6))
-
-# Get unique experiment IDs
-experiment_ids = df['experiment_id'].unique()
-
-# Loop through each experiment ID and plot it
-for experiment_id in experiment_ids:
-    subset_df = df[df['experiment_id'] == experiment_id]
-    ax.plot(subset_df["trial_id"], subset_df["cumulative_save_rate"], label=f'Experiment {experiment_id}')
-
-ax.plot(df["trial_id"], df["target_save_rate"], label='target')
-ax.set_xlabel('Trial ID')
-ax.set_ylabel('Cumulative Save Rate')
-ax.set_title('Cumulative Save Rate by Experiment Over Trials', fontsize=14)
-# ax.legend()
-
-plt.show()
-
-# COMMAND ----------
-
-
-
-# COMMAND ----------
-
-#track number of times we explore vs. exploit
-    num_times_explored = 0
-    num_times_exploited = 0
-    #track number of times we selected the best gk to face a shot
-    num_best_gk = 0
-    best_gk_j = np.argmax([gk.p for gk in gks]) #we don't know this in real life
-    print('Best GK: ', [gk.name for gk in gks][np.argmax([gk.p for gk in gks])])
-    print()
-
-        #PRINT EXPERIMENT RESULTS
-    print(f"{'Goalkeeper':<15} {'True Save Rate':<15} {'Shots Faced':<5} {'Est. Save Rate':<5}")
-    for gk in gks:
-        print(f'{gk.name:<15} {gk.p:<15} {gk.N:<5} {round(gk.p_estimate,3):<5}')
-
-    print()
-    print('Summary Stats')
-    print('Total Saves:', results.sum())
-    print('Overall Save Rate:', results.sum() / num_trials)
-    print('Times Explored:', num_times_explored)
-    print('Times Exploited:', num_times_exploited)
-    print(f'Times {[gk.name for gk in gks][np.argmax([gk.p for gk in gks])]} faced the shot:', num_best_gk)
-
-    # cumulative_rewards = np.cumsum(rewards)
-    # win_rates = cumulative_rewards / (np.arange(num_trials) + 1)
-    # plt.plot(win_rates)
-    # plt.plot(np.ones(num_trials)*np.max(bandit_probs))
-    # plt.show()
-
-# COMMAND ----------
-
-num_trials = 500
-eps = 0.1
-gk_save_rates = [0.2, 0.25, 0.3]
-gk_names = ['Buffon', 'Casillas', 'Neuer']
-
-# COMMAND ----------
-
-np.random.seed(33346383)  # Set the seed for reproducibility
-
-experiment()
+plot_top_goalkeeper_rate_simulation(df_sim)
