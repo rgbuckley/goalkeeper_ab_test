@@ -1256,14 +1256,19 @@ plot_optimal_rate_experiment(df_exp)
 # MAGIC
 # MAGIC In this experiment, we can see that Buffon made a save early on while the others were scored on. This led us to believe Buffon had the best rate and have him face more shots. 
 # MAGIC
-# MAGIC Casillas then made a couple saves around 75 shots in. This led us to believe he was the best goalkeeper. He, however, failed to save subsequent shots and his estimated dropped back below Buffon. 
+# MAGIC Casillas then made a couple saves around 75 shots in. This led us to believe he was the best goalkeeper. He, however, failed to save subsequent shots and his estimate dropped back below Buffon. 
 # MAGIC
-# MAGIC Since we 
+# MAGIC Since we suspected Buffon and Casillas of better save rates, we actually selected Neuer so few times that he does not save a shot until the 200th shot of the experiment. With more shots, however, we see his estimated save rate climb. By the 400th shot of the experiement, his estimated save rate is above the other two goalkeepers. We continue to have him face more and more shots and his estimated save rate converges to his true 30% mark. 
 # MAGIC
 
 # COMMAND ----------
 
 plot_p_est_experiment(df_exp)
+
+# COMMAND ----------
+
+# MAGIC %md
+# MAGIC This final chart shows who we thought was the best goalkeeper after each shot. So for example, if we had stopped our experiement after 10 trials, the bar is blue and we would have chosen Buffon as our top goalkeeper. If we had stopped after 320 trials, the bar is red and we would have selected Casillas as our best goalkeeper. After 500 trials, the bar is teal, and we would have selected Neuer.
 
 # COMMAND ----------
 
