@@ -263,7 +263,7 @@ t_experiment('Buffon', buffon_rate, 'Casillas', casillas_rate, n, 123)
 # COMMAND ----------
 
 # MAGIC %md
-# MAGIC #Approach 2: Greedy Epsilon
+# MAGIC #Approach 2: Epsilon Greedy
 
 # COMMAND ----------
 
@@ -308,7 +308,7 @@ orange = '#FF7F0E' #target
 # COMMAND ----------
 
 # MAGIC %md
-# MAGIC ### Code to Run Simulation
+# MAGIC ### Code for Simulation
 
 # COMMAND ----------
 
@@ -659,7 +659,7 @@ def plot_exploit_rate_simulation(df):
     ax.fill_between(df_grp["trial_id"], df_grp["exploit_rate_min"], df_grp["exploit_rate_max"], color=gray, label='Std. Dev.')
 
     #y should be betwee 0 and 1
-    ax.set_ylim(0, 1) 
+    ax.set_ylim(0, 1.05) 
 
     #labels
     ax.set_xlabel('Trial ID')
@@ -705,7 +705,7 @@ def plot_save_rate_simulation(df):
     ax.fill_between(df_grp["trial_id"], df_grp["save_rate_min"], df_grp["save_rate_max"], color=gray, label='Std. Dev.')
 
     #y should be betwee 0 and 1
-    ax.set_ylim(0, 1) 
+    ax.set_ylim(0, 1.05) 
 
     #labels
     ax.set_xlabel('Trial ID')
@@ -717,7 +717,7 @@ def plot_save_rate_simulation(df):
 
 # COMMAND ----------
 
-def plot_optimal_rate_simulation(df):
+def plot_optimal_rate_simulation(df, title='Average Cumulative Optimal Rate over Trials'):
     """
     Given a dataframe output from a simulation, plot the cumulative optimal rate
     """
@@ -756,7 +756,7 @@ def plot_optimal_rate_simulation(df):
     #labels
     ax.set_xlabel('Trial ID')
     ax.set_ylabel('Optimal Rate')
-    ax.set_title('Average Cumulative Optimal Rate over Trials', fontsize=10, loc='left')
+    ax.set_title(title, fontsize=10, loc='left')
     ax.legend(fontsize=8)
 
     plt.show()
@@ -887,7 +887,7 @@ def plot_top_goalkeeper_simulation(df):
 
 # COMMAND ----------
 
-def plot_top_goalkeeper_rate_simulation(df, title=''):
+def plot_top_goalkeeper_rate_simulation(df, title='Selected Rate over Trials'):
     """
     Given a dataframe output from a simulation, plot the rate that we chose each goalkeeper over time
 
@@ -924,8 +924,6 @@ def plot_top_goalkeeper_rate_simulation(df, title=''):
     #labels
     ax.set_xlabel('Trial ID')
     ax.set_ylabel('Rate Selected')
-    if title == '': #set default title if none given
-        title = 'Selected Rate over Trials'
     ax.set_title(title, fontsize=10, loc='left')
     ax.legend(fontsize=8)
 
@@ -933,13 +931,15 @@ def plot_top_goalkeeper_rate_simulation(df, title=''):
 
 # COMMAND ----------
 
-def plot_simulation_summary(df):
+def plot_simulation_summary(df, title='Simulation Summary'):
     """
     Given a dataframe output from a simulation, plot all relevant graphs
     """
 
     #set up grid
     fig, ((ax1, ax2), (ax3, ax4), (ax5, ax6)) = plt.subplots(nrows=3, ncols=2, sharex=True, figsize=(12, 12))
+    #set title for whole canvas
+    fig.suptitle(title, fontsize=16)
 
     # EXPLOIT RATE
 
@@ -969,7 +969,7 @@ def plot_simulation_summary(df):
     ax1.fill_between(df_grp["trial_id"], df_grp["exploit_rate_min"], df_grp["exploit_rate_max"], color=gray, label='Std. Dev.')
 
     #y should be betwee 0 and 1
-    ax1.set_ylim(0, 1) 
+    ax1.set_ylim(0, 1.05) 
 
     #labels
     # ax1.set_xlabel('Trial ID')
@@ -1005,7 +1005,7 @@ def plot_simulation_summary(df):
     ax2.fill_between(df_grp["trial_id"], df_grp["save_rate_min"], df_grp["save_rate_max"], color=gray, label='Std. Dev.')
 
     #y should be betwee 0 and 1
-    ax2.set_ylim(0, 1) 
+    ax2.set_ylim(0, 1.05) 
 
     #labels
     # ax2.set_xlabel('Trial ID')
@@ -1319,7 +1319,7 @@ plot_top_goalkeeper_experiment(df_exp)
 
 # COMMAND ----------
 
-plot_simulation_summary(df_sim_eps)
+plot_simulation_summary(df_sim_eps, title='Epsilon Greedy Summary')
 
 # COMMAND ----------
 
@@ -1376,3 +1376,279 @@ plot_top_goalkeeper_rate_simulation(df_sim_eps_3, 'Neuer Breaking Tie')
 
 # MAGIC %md 
 # MAGIC # Approach 3: Optimistic Initial Values
+
+# COMMAND ----------
+
+# MAGIC %md
+# MAGIC The analyst proposes this modified experiment.
+# MAGIC
+# MAGIC > Assume all goalkeepers have an impossibly high save rate (5, for example). For each shot, choose the goalkeeper with the highest estimated save rate to face the next shot.
+# MAGIC - This forces the algorithm to explore early on. Even if the first goalkeeper saves the first shot (save rate = 1), their estimated save rate will fall from the initial estimate of 5. We will then select a different goalkeeper to face the next shot
+# MAGIC - The higher the initial estimated save rate, the more we will explore early on 
+
+# COMMAND ----------
+
+# MAGIC %md
+# MAGIC ## Simulation
+
+# COMMAND ----------
+
+# MAGIC %md
+# MAGIC ### Code for Simulation
+
+# COMMAND ----------
+
+#set up a class to model each goalkeeper
+class Goalkeeper_ov:
+    def __init__(self, p, name):
+        self.p = p #p is the true save rate
+        self.p_estimate = 5 #start with an estimate of 5 that will come down
+        self.N = 1 #samples collected so far, keeps initial estimate
+        self.name = name #assign name to goalkeeper
+
+    def face_shot(self):
+        #save the shot with probability p
+        return np.random.random() < self.p
+    
+    def update(self, x):
+        #x is 0 or 1
+        self.N += 1 #record the faced shot
+        self.p_estimate = ((self.N - 1)*self.p_estimate + x) / self.N #update our estimate of p
+
+# COMMAND ----------
+
+def experiment_ov(num_trials, gk_save_rates, gk_names):
+    """
+    Run an optimistic values experiment
+
+    num_trials (int): the number of trials in the experiment
+    gk_save_rates (list of floats): the true save rates of each goalkeeper
+    gk_names (list of strings): the names of each goalkeeper (must be same order as rates)
+
+    df (dataframe): the results of the experiment 
+    """
+
+    #get a list of all goalkeepers
+    gks = [Goalkeeper_ov(p, name) for p, name in zip(gk_save_rates, gk_names)]
+
+    #initialize results
+    trial_ids = []
+    exploit_results = []
+    gk_results = []
+    save_results = []
+    p_est_results = []
+    chosen_results = []
+     
+    #For each trial in the experiment, we exploit, select gk, and face the shot
+    for i in range(num_trials):
+        #SELECT GK
+        trial_ids.append(i+1) #record trial id
+
+        exploit_results.append(True) #recrod exploit
+        gk_selected = np.argmax([gk.p_estimate for gk in gks]) #choose gk with current best rate
+        gk_results.append(gks[gk_selected].name) #record which gk we selected
+
+        #FACE THE SHOT
+
+        #face the shot. 1 if a save, 0 if a goal
+        save = gks[gk_selected].face_shot()
+        #udpate results array
+        save_results.append(save)
+        #update the estimate of gk save rate
+        gks[gk_selected].update(save)
+        #record estimates
+        p_est_results.append([gk.p_estimate for gk in gks])
+        #record chosen gk after this trial
+        chosen_results.append(gks[np.argmax([gk.p_estimate for gk in gks])].name)
+
+    #determine array of optimal choice
+    opt = gks[np.argmax([gk.p for gk in gks])].name #optimal gk
+    opt_results = [g == opt for g in gk_results]
+    
+    #compile results in a dataframe
+    df = pd.DataFrame({
+        **{
+            'trial_id': trial_ids,
+            'exploit': exploit_results,
+            'goalkeeper': gk_results,
+            'optimal_goalkeeper': opt_results,
+            'save': save_results,
+            },
+        **{gks[i].name+'_est_p': [x[i] for x in p_est_results] for i in range(len(gks))},
+        **{
+            'top_goalkeeper': chosen_results,
+            }
+        }
+                      )
+    
+    #add true save rates
+    for g in gks:
+        df[g.name+'_p'] = g.p
+    
+    #Add cumulative results
+    df['cumulative_exploit'] = df['exploit'].cumsum()
+    df['cumulative_exploit_rate'] = df['cumulative_exploit'] / df['trial_id']
+    df['target_exploit_rate'] = 1
+    df['cumulative_optimal_goalkeeper'] = df['optimal_goalkeeper'].cumsum()
+    df['cumulative_optimal_rate'] = df['cumulative_optimal_goalkeeper'] / df['trial_id']
+    df['target_optimal_rate'] = 1
+    df['cumulative_saves'] = df['save'].cumsum()
+    df['cumulative_save_rate'] = df['cumulative_saves'] / df['trial_id']
+    df['target_save_rate'] = np.max([gk.p for gk in gks])
+    
+    #record parameters
+    df['num_trials'] = num_trials
+    
+    return df
+
+# COMMAND ----------
+
+def simulation_ov(num_experiments, num_trials, gk_save_rates, gk_names):
+    """
+    Run a simulation of optimistic values experiments
+
+    num_experiments (int): the number of experiments in the simulation
+    num_trials (int): the number of trials per experiment
+    gk_save_rates (list of floats): the true save rates of each goalkeeper
+    gk_names (list of strings): the names of each goalkeeper (must be same order as rates)
+
+    sim_df (dataframe): the results of the simulation 
+    """
+
+    #initialize df
+    i = 1
+    np.random.seed(i) #set seed
+    sim_df = experiment_ov(num_trials, gk_save_rates, gk_names)
+    sim_df['experiment_id'] = i
+
+    #iterate through other trials
+    for i in range(1, num_experiments):
+        np.random.seed(i+1)  #set seed
+        df = experiment_ov(num_trials, gk_save_rates, gk_names)
+        df['experiment_id'] = i+1
+        sim_df = pd.concat([sim_df, df])
+
+    return sim_df
+
+
+# COMMAND ----------
+
+# MAGIC %md
+# MAGIC ### Run Simulation
+
+# COMMAND ----------
+
+#set parameters for the simulation
+num_experiments = 100
+num_trials = 1000
+gk_save_rates = [0.2, 0.25, 0.3]
+gk_names = ['Buffon', 'Casillas', 'Neuer']
+
+df_sim_ov = simulation_ov(num_experiments,num_trials,gk_save_rates,gk_names)
+
+
+#do two more simulations in a different order
+gk_save_rates = [0.25, 0.3, 0.2]
+gk_names = ['Casillas', 'Neuer', 'Buffon']
+df_sim_ov_2 = simulation_ov(num_experiments,num_trials,gk_save_rates,gk_names)
+
+gk_save_rates = [0.3, 0.2, 0.25]
+gk_names = ['Neuer', 'Buffon','Casillas']
+df_sim_ov_3 = simulation_ov(num_experiments,num_trials,gk_save_rates,gk_names)
+
+# COMMAND ----------
+
+# MAGIC %md
+# MAGIC ## Results
+
+# COMMAND ----------
+
+# MAGIC %md
+# MAGIC The analyst finds some notable results in the new approach:
+# MAGIC
+# MAGIC - The chart in the top left shows we are no longer using epsilon to explore
+# MAGIC - The chart if the top right shows we get much closer to our target true save rate with this method.
+# MAGIC - The chart in the middle right shows the estimated save rates starting at 5 and coming down to the true save rates.
+# MAGIC   - Here, though, we see that the rates for Casillas and Buffon do not converge to their true rates. Instead, as soon as the estimates drop below Neuer, that stay constant since we no longer exlore those goalkeepers.
+# MAGIC
+
+# COMMAND ----------
+
+plot_simulation_summary(df_sim_ov, 'Optimistic Values Summary')
+
+# COMMAND ----------
+
+# MAGIC %md
+# MAGIC ### Optimal Rate
+# MAGIC Let's do a deep dive on the optimal rate chart (middle left above).
+
+# COMMAND ----------
+
+# MAGIC %md
+# MAGIC - With the optimistic values approach, we begin selecting the correct goalkeepr much quicker.
+# MAGIC   - With the epsilon greedy approach, it takes about 200 trials to select the correct goalkeeper 40% of the time. By contrast, it takes about 50 trials with the optimistic values approach
+# MAGIC - Our uncertainty using the second method is much smaller, meaning we can be much more confident in our estimate using the second approach.
+
+# COMMAND ----------
+
+plot_optimal_rate_simulation(df_sim_eps, 'Epsilon Greedy')
+
+# COMMAND ----------
+
+plot_optimal_rate_simulation(df_sim_ov, 'Optimistic Values')
+
+# COMMAND ----------
+
+# MAGIC %md
+# MAGIC ### Order Issue
+# MAGIC Now, let's check if we still get varied results when changing the order of the goalkeepers
+
+# COMMAND ----------
+
+plot_top_goalkeeper_rate_simulation(df_sim_ov, 'Buffon Breaking Tie')
+
+# COMMAND ----------
+
+plot_top_goalkeeper_rate_simulation(df_sim_ov_2, 'Casillas Breaking Tie')
+
+# COMMAND ----------
+
+plot_top_goalkeeper_rate_simulation(df_sim_ov_3, 'Neuer Breaking Tie')
+
+# COMMAND ----------
+
+# MAGIC %md
+# MAGIC While there is slight variation, we can see that our results are independent of the order we put the goalkeepers in. This method solved our issue!
+
+# COMMAND ----------
+
+# MAGIC %md
+# MAGIC ## Conclusion
+# MAGIC Is this new method solving our use case of selecting the base goalkeeper?
+
+# COMMAND ----------
+
+# MAGIC %md
+# MAGIC In the Epsilon Greedy Method, after taking 500 shots we, on average, selected Neuer as our best goakeeper 60% of the time. 
+# MAGIC
+# MAGIC Using the Optimistic Values Method, we, on average, identify Neuer correctly 80% of the time after 500 shots. This is a significant improvement.
+
+# COMMAND ----------
+
+plot_top_goalkeeper_rate_simulation(df_sim_eps, 'Epsilon Greedy')
+
+# COMMAND ----------
+
+plot_top_goalkeeper_rate_simulation(df_sim_ov, 'Optimistic Values')
+
+# COMMAND ----------
+
+# MAGIC %md
+# MAGIC The analyst is pleased with the results. One drawback, however, is that this method does not estimate the true save rates of all goalkeepers. Instead, only the estimate for the top goalkeeper converges to the true rate. 
+# MAGIC
+# MAGIC The analyst wants to solve this issue before chatting with the coach again. He turns to a new method...
+
+# COMMAND ----------
+
+# MAGIC %md
+# MAGIC # Approach 4: UCB1
