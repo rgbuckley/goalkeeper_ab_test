@@ -11,7 +11,7 @@ The project simulates several approaches to solving this problem including:
 
 After discussing the strengths and weaknesses of each approach, the coach selects a method and we run the experiment to determine the best goalkeeper.
 
-For the full code and story: [use this python notebook](full_code_and_story.ipynb)
+For the full code and story: [use this python notebook](full_code_and_story.ipynb)  
 For the full story, but no code: [use this html page](full_story.html)
 
 # Extending the Project
