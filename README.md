@@ -14,6 +14,7 @@ After discussing the strengths and weaknesses of each approach, the coach select
 For the full code and story: [use this python notebook](full_code_and_story.ipynb)  
 For the full story, but no code: [use this html page](full_story.html)
   - If the file says it's too large, visit [this website](https://rgbuckley.github.io/goalkeeper_ab_test/) and follow the above link again
+For the executive summary: [use this slide](exec_summary.jpg)
 
 # Extending the Project
 
