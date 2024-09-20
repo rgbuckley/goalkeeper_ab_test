@@ -11,6 +11,9 @@ The project simulates several approaches to solving this problem including:
 
 After discussing the strengths and weaknesses of each approach, the coach selects a method and we run the experiment to determine the best goalkeeper.
 
+For the full code and story: [use this python notebook](full_code_and_story.ipynb)
+For the full story, but no code: [use this html page](full_story.html)
+
 # Extending the Project
 
 This project explores how a coach might use data to determine which goalkeeper on her roster has the highest save rate. The applications for this kind of algorithm, however, are much broader than sports. Similar approaches could be used for:
